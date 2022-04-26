@@ -44,9 +44,9 @@ import { loadPalette } from './bootstrap.js';
  */
 function getColor(r, g = null, b = null) {
     if ((g == null) && (b == null)) {
-        r = (r / 100) % 10;
-        g = (r / 10) % 10;
         b = (r % 10);
+        g = Math.floor(r / 10) % 10;
+        r = Math.floor(r / 100) % 10;
         return r * 36 + g * 6 + b;
     } else {
         r = Math.floor(r);

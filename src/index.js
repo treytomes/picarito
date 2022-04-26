@@ -2,169 +2,53 @@ import {
     GameCanvas, clearScreen, setPixel, initialize
 } from './framework/bootstrap.js';
 
-import {default as Jimp} from 'jimp';
-
 import { MoreMath } from './framework/MoreMath.js';
 import { generatePalette, getColor } from './framework/radialPalette.js';
+import TileSet from './TileSet';
 import OEM437_8 from './OEM437_8.png';
 
 import './style.css';
+import { isNumber } from 'lodash';
 
-const DROP_HEIGHT = 16;
-const DROP_RADIUS = 8;
-const DAMPING_FACTOR = 128; // 16;
-const DROP_SPEED = 300;
-const ENABLE_DROPS = false;
+class ConsoleTile {
+	constructor(tileIndex, foregroundColor, backgroundColor) {
+		this.tileIndex = tileIndex;
+		this.foregroundColor = foregroundColor;
+		this.backgroundColor = backgroundColor;
+	}
 
-class WaterRipplesGameCanvas extends GameCanvas {
+	set tileIndex(value) {
+		if (!isNumber(value)) {
+			this._tileIndex = value.charCodeAt(0);
+		} else {
+			this._tileIndex = Math.floor(value);
+		}
+	}
 
-    constructor() {
-        super();
-        
-        //this.screenWidth = 640;
-        //this.screenHeight = 480;
-
-        this.lastDropTime = 0;
-        
-        this.waves0 = new Float64Array(this.screenWidth * this.screenHeight);
-        this.waves1 = new Float64Array(this.screenWidth * this.screenHeight);
-        this.activeBuffer = 0;
-    }
-
-    getWaveValue(bufferIndex, x, y) {
-        if (!MoreMath.isInRange(x, 0, this.screenWidth) || !MoreMath.isInRange(y, 0, this.screenHeight)) {
-            return 0;
-        }
-    
-        if (bufferIndex == 0) {
-            return this.waves0[x + y * this.screenWidth];
-        } else {
-            return this.waves1[x + y * this.screenWidth];
-        }
-    }
-    
-    setWaveValue(bufferIndex, x, y, value) {
-        if (!MoreMath.isInRange(x, 0, this.screenWidth) || !MoreMath.isInRange(y, 0, this.screenHeight)) {
-            return;
-        }
-    
-        if (bufferIndex == 0) {
-            this.waves0[x + y * this.screenWidth] = value;
-        } else {
-            this.waves1[x + y * this.screenWidth] = value;
-        }
-    }
-    
-    putDrop(x, y, height) {
-        for (let i = -DROP_RADIUS; i <= DROP_RADIUS; i++) {
-            for (let j = -DROP_RADIUS; j <= DROP_RADIUS; j++) {
-                let dx = x + i;
-                let dy = y + j;
-                if (MoreMath.isInRange(dx, 0, this.screenWidth) && MoreMath.isInRange(dy, 0, this.screenHeight)) {
-                    let dist = Math.sqrt(i * i + j * j);
-                    if (dist < DROP_RADIUS) {
-                        let value = Math.cos(dist * Math.PI / DROP_RADIUS) * height;
-                        this.setWaveValue(this.activeBuffer, dx, dy, value);
-                    }
-                }
-            }
-        }
-    }
-    
-    onInit() {
-        generatePalette();
-    }
-    
-    onMouseDown(x, y, buttons) {
-        if (buttons & 1) {
-            this.putDrop(x, y, DROP_HEIGHT);
-        }
-    }
-    
-    onMouseMove(x, y, buttons) {
-        if (buttons & 1) {
-            this.putDrop(x, y, DROP_HEIGHT);
-        }
-    }
-    
-    /**
-     * 
-     * @param {number} time Total elapsed milliseconds.
-     */
-    onUpdate(time) {
-        if (ENABLE_DROPS) {
-            if (time - this.lastDropTime >= DROP_SPEED) {
-                this.lastDropTime = time;
-    
-                let dx = Math.floor(Math.random() * this.screenWidth);
-                let dy = Math.floor(Math.random() * this.screenHeight);
-                this.putDrop(dx, dy, DROP_HEIGHT);
-            }
-        }
-    
-        let newBuffer = (this.activeBuffer == 0) ? 1 : 0;
-    
-        for (let x = 0; x < this.screenWidth; x++) {
-            for (let y = 0; y < this.screenHeight; y++) {
-                this.setWaveValue(newBuffer, x, y, ((
-                    this.getWaveValue(this.activeBuffer, x - 1, y - 1) +
-                    this.getWaveValue(this.activeBuffer, x, y - 1) +
-                    this.getWaveValue(this.activeBuffer, x + 1, y - 1) +
-                    this.getWaveValue(this.activeBuffer, x - 1, y) +
-                    this.getWaveValue(this.activeBuffer, x + 1, y) +
-                    this.getWaveValue(this.activeBuffer, x - 1, y + 1) +
-                    this.getWaveValue(this.activeBuffer, x, y + 1) +
-                    this.getWaveValue(this.activeBuffer, x + 1, y + 1)
-                ) / 4) - this.getWaveValue(newBuffer, x, y));
-    
-                // Damping.
-                let value = this.getWaveValue(newBuffer, x, y)
-                if (value < 0.001) {
-                    // Handle the floating-point errors.
-                    value = 0;
-                    this.setWaveValue(newBuffer, x, y, value);
-                } else if (value != 0) {
-                    value = Math.round(value - value / DAMPING_FACTOR);
-                    this.setWaveValue(newBuffer, x, y, value);
-                }
-            }
-        }
-        this.activeBuffer = newBuffer;
-    }
-    
-    /**
-     * 
-     * @param {number} time Total elapsed milliseconds.
-     */
-    onRender(time) {
-        clearScreen(0);
-    
-        for (let x = 0; x < this.screenWidth; x++) {
-            for (let y = 0; y < this.screenHeight; y++) {
-                // This gives us the effect of water breaking the light.
-                let xOffset = (this.getWaveValue(this.activeBuffer, x - 1, y) - this.getWaveValue(this.activeBuffer, x + 1, y)) / 8;
-                let yOffset = (this.getWaveValue(this.activeBuffer, x, y - 1) - this.getWaveValue(this.activeBuffer, x, y + 1)) / 8;
-    
-                if ((xOffset != 0) || (yOffset != 0)) {
-                    // Generate alpha.
-                    let alpha = 200 - xOffset;
-                    if (alpha < 0) alpha = 0;
-                    if (alpha > 255) alpha = 254;
-    
-                    let c = (alpha / 255) * 5;
-                    setPixel(x + xOffset, y + yOffset, getColor(c, c, c));
-                }
-            }
-        }
-    }
+	get tileIndex() {
+		return this._tileIndex;
+	}
 }
 
 class TerminalGameCanvas extends GameCanvas {
 	constructor() {
 		super();
 
-		this.tileImage = null;
-		this.isReady = false;
+		this.tileSet = new TileSet(OEM437_8, 8, 8);
+
+		this.rows = this.screenHeight / this.tileSet.tileHeight;
+		this.columns = this.screenWidth / this.tileSet.tileWidth;
+
+		this.tiles = [];
+		for (let r = 0; r < this.rows; r++) {
+			let row = [];
+			for (let c = 0; c < this.columns; c++) {
+				row.push(new ConsoleTile(0, getColor(333), getColor(0)));
+			}
+			this.tiles.push(row);
+		}
+
+		this.drawString(5, 10, 'Hello world!', getColor(550), getColor(3));
 	}
     
     onInit() {
@@ -178,38 +62,42 @@ class TerminalGameCanvas extends GameCanvas {
 	}
 
 	loadContent() {
-		Jimp.read(OEM437_8).then(image => {
-			this.tileImage = image;
-			this.isReady = true;
-		});
+		this.tileSet.loadContent();
+	}
+
+	drawTile(row, column, tileIndex = null, foregroundColor = null, backgroundColor = null) {
+		const tile = this.tiles[row][column];
+		if (tileIndex != null) {
+			tile.tileIndex = tileIndex;
+		}
+		if (foregroundColor != null) {
+			tile.foregroundColor = foregroundColor;
+		}
+		if (backgroundColor != null) {
+			tile.backgroundColor = backgroundColor;
+		}
+	}
+
+	drawString(row, column, text, foregroundColor = null, backgroundColor = null) {
+		for (let n = 0; n < text.length; n++) {
+			this.drawTile(row, column + n, text[n], foregroundColor, backgroundColor);
+		}
 	}
 
     /**
      * @param {number} time Total elapsed milliseconds.
      */
 	onRender(time) {
-        clearScreen(0);
-
-		if (!this.isReady) {
+		if (!this.tileSet.isLoaded) {
 			return;
 		}
 
-		for (let y = 0; y < 128; y++) {
-			for (let x = 0; x < 128; x++) {
-				const c = this.tileImage.getPixelColor(x, y);
-				if (c != 0x000000FF) {
-					setPixel(x, y, getColor(5, 5, 5));
-				}
+		for (let r = 0, y = 0; r < this.rows; r++, y += this.tileSet.tileHeight) {
+			for (let c = 0, x = 0; c < this.columns; c++, x += this.tileSet.tileWidth) {
+				const tile = this.tiles[r][c];
+				this.tileSet.draw(x, y, tile.tileIndex, tile.foregroundColor, tile.backgroundColor);
 			}
 		}
-
-		setPixel(10, 10, getColor(5, 0, 0));
-		setPixel(11, 10, getColor(0, 5, 0));
-		setPixel(12, 10, getColor(5, 5, 0));
-		setPixel(13, 10, getColor(0, 0, 5));
-		setPixel(14, 10, getColor(5, 0, 5));
-		setPixel(15, 10, getColor(0, 5, 5));
-		setPixel(16, 10, getColor(5, 5, 5));
 	}
 }
 
