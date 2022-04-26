@@ -1,34 +1,15 @@
 import {
-    GameCanvas, clearScreen, setPixel, initialize
+    GameCanvas, initialize
 } from './framework/bootstrap.js';
 
 import { MoreMath } from './framework/MoreMath.js';
 import { generatePalette, getColor } from './framework/radialPalette.js';
 import TileSet from './TileSet';
+import ConsoleTile from './ConsoleTile';
 import OEM437_8 from './OEM437_8.png';
 
 import './style.css';
 import { isNumber } from 'lodash';
-
-class ConsoleTile {
-	constructor(tileIndex, foregroundColor, backgroundColor) {
-		this.tileIndex = tileIndex;
-		this.foregroundColor = foregroundColor;
-		this.backgroundColor = backgroundColor;
-	}
-
-	set tileIndex(value) {
-		if (!isNumber(value)) {
-			this._tileIndex = value.charCodeAt(0);
-		} else {
-			this._tileIndex = Math.floor(value);
-		}
-	}
-
-	get tileIndex() {
-		return this._tileIndex;
-	}
-}
 
 class TerminalGameCanvas extends GameCanvas {
 	constructor() {
@@ -102,7 +83,6 @@ class TerminalGameCanvas extends GameCanvas {
 }
 
 function onWindowLoad() {
-    //initialize(new WaterRipplesGameCanvas());
 	initialize(new TerminalGameCanvas());
 }
 
