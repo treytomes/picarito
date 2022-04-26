@@ -39,6 +39,10 @@ module.exports = {
 			{
 				test: /\.xml$/i,
 				use: [ 'xml-loader' ]
+			},
+			{
+				test: /\.(txt|fs|vs)$/i,
+				use: [ 'text-loader' ]
 			}
 		]
 	},

@@ -14,6 +14,16 @@ https://webglfundamentals.org/
 */
 
 import * as twgl from 'twgl.js';
+import GameCanvas from './GameCanvas';
+import RenderContext from './RenderContext';
+import PaletteContext from './PaletteContext';
+
+import RENDER_SHADER_VS from './render.vs';
+import RENDER_SHADER_FS from './render.fs';
+import CANVAS_SHADER_VS from './canvas.vs';
+import CANVAS_SHADER_FS from './canvas.fs';
+
+const PALETTE_SIZE = 256;
 
 // These are used to setup the quad buffer for rendering the image data to the framebuffer.
 const QUAD_ARRAYS = {
@@ -38,11 +48,6 @@ const QUAD_ARRAYS = {
     ],
 };
 
-const PALETTE_SIZE = 256;
-
-// The 256-color screen palette.
-const PALETTE = new Uint8Array(PALETTE_SIZE * 4);
-
 // Setup a unit quad composed of 2 triangles for rendering the framebuffer to the canvas.
 const FRAMEBUFFER_POSITIONS = [
     1,  1,
@@ -54,36 +59,15 @@ const FRAMEBUFFER_POSITIONS = [
     1, -1,
 ];
 
-class GameCanvas {
-    constructor(canvas = null) {
-        this.canvas = canvas ?? document.querySelector('canvas');
-
-        // Standard SNES resolution.
-        this.screenWidth = 256;
-        this.screenHeight = 224;
-		this.isContentLoaded = false;
-    }
-
-    onInit() {}
-	loadContent() {}
-    onMouseDown(x, y, buttons) {}
-    onMouseUp(x, y, buttons) {}
-    onMouseMove(x, y, buttons) {}
-    onUpdate(time) {}
-    onRender(time) {}
-}
-
 let _instance = null;
 let gl = null;
-let renderImage = null;  // The image representing our scren.
+let renderContext = null;
+let paletteContext = null;
 let canvasShader = null;
 let renderShader = null;
 let quadBufferInfo = null;
-let renderTexture = null;
 let depthBuffer = null;
 let fb = null;
-let paletteTex = null;
-let imageTex = null;
 
 function hsv2rgb(hue, saturation, brightness) {
     if (hue < 0) hue = 0;
@@ -148,20 +132,6 @@ function initializeQuadBuffer() {
 }
 
 /**
- * Make a pixel texture to match the requested screen size.
- */
-function initializeRenderTexture() {
-    renderImage = new Uint8Array(_instance.screenWidth * _instance.screenHeight);
-    renderTexture = gl.createTexture();
-    gl.bindTexture(gl.TEXTURE_2D, renderTexture);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, _instance.screenWidth, _instance.screenHeight, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-}
-
-/**
  * Create a depth buffer to use with the render texture.
  * 
  * @param {*} screenWidth 
@@ -180,63 +150,12 @@ function initializeFramebuffer() {
     fb = gl.createFramebuffer();
     gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
 
-    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, renderTexture, 0);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, renderContext.texture, 0);
     gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, depthBuffer);
 }
 
 function loadRenderShader() {
-    const VERTEX_SHADER = `
-        attribute vec4 a_position;
-        varying vec2 v_texcoord;
-        void main() {
-            gl_Position = a_position;
-            
-            // assuming a unit quad for position we
-            // can just use that for texcoords. Flip Y though so we get the top at 0
-            v_texcoord = a_position.xy * vec2(0.5, -0.5) + 0.5;
-        }    
-    `;
-    const FRAGMENT_SHADER = `
-        precision mediump float;
-        varying vec2 v_texcoord;
-        uniform sampler2D u_image;
-        uniform sampler2D u_palette;
-        uniform float u_time;
-
-        vec2 distort(vec2 pos) {
-            float distortion = 0.1;
-            pos -= vec2(0.5, 0.5);
-            pos *= vec2(pow(length(pos), distortion));
-            pos += vec2(0.5, 0.5);
-            return pos;
-        }
-
-        void main() {
-            vec2 pos = v_texcoord;
-
-            // Barrel Distortion
-            //pos = distort(pos);
-
-            float index = texture2D(u_image, pos).a * 255.0;
-
-            vec4 color = texture2D(u_palette, vec2((index + 0.5) / 256.0, 0.5));
-
-            // Scanlines
-            /*
-            color -= abs(sin(pos.y * 100.0 + u_time * 5.0)) * 0.08; // (1)
-            color -= abs(sin(pos.y * 300.0 - u_time * 10.0)) * 0.05; // (2)
-            color.a = 1.0;
-            */
-            
-            if (pos.x > 1.0 || pos.x < 0.0 || pos.y > 1.0 || pos.y < 0.0) {
-                gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); // black
-            } else {
-                gl_FragColor = color; // vec4(color, 1.0).rgba;
-            }
-        }
-    `;
-
-    renderShader = twgl.createProgramInfo(gl, [VERTEX_SHADER, FRAGMENT_SHADER]);
+    renderShader = twgl.createProgramInfo(gl, [ RENDER_SHADER_VS, RENDER_SHADER_FS ]);
 
     gl.useProgram(renderShader.program);
     let imageLoc = gl.getUniformLocation(renderShader.program, "u_image");
@@ -248,102 +167,21 @@ function loadRenderShader() {
 }
 
 function loadCanvasShader() {
-    const VERTEX_SHADER = `
-        attribute vec4 position;
-        attribute vec2 texcoord;
-
-        uniform mat4 u_matrix;
-
-        varying vec2 v_texcoord;
-
-        void main() {
-            gl_Position = u_matrix * position;
-            v_texcoord = texcoord;
-            
-        }
-    `;
-    const FRAGMENT_SHADER = `
-        precision mediump float;
-        varying vec2 v_texcoord;
-        uniform sampler2D u_texture;
-        uniform float u_time;
-
-        void main() {
-            vec2 pos = v_texcoord;
-            vec4 color = texture2D(u_texture, v_texcoord);
-
-            // Scanlines
-            color -= abs(sin(pos.y * 100.0 + u_time * 5.0)) * 0.08; // (1)
-            color -= abs(sin(pos.y * 300.0 - u_time * 10.0)) * 0.05; // (2)
-            color.a = 1.0;
-
-            gl_FragColor = color;
-        }
-    `;
-
     // Compiles shaders, links program, looks up locations.
-    canvasShader = twgl.createProgramInfo(gl, [VERTEX_SHADER, FRAGMENT_SHADER]);
+    canvasShader = twgl.createProgramInfo(gl, [ CANVAS_SHADER_VS, CANVAS_SHADER_FS ]);
 }
 
 /**
  * Upload the palette data to video memory.
  */
- function initializePalette() {
-    paletteTex = gl.createTexture();
-    gl.activeTexture(gl.TEXTURE1);
-    gl.bindTexture(gl.TEXTURE_2D, paletteTex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, PALETTE_SIZE, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, PALETTE);
-}
-
-/**
- * Reload the palette texture in video memory from the renderImage array.
- */
- function refreshPaletteImage() {
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, paletteTex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, PALETTE_SIZE, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, PALETTE);
-}
+function initializePalette() {}
 
 function setPalette(index, r, g, b, a = 255) {
-    PALETTE[index * 4 + 0] = r;
-    PALETTE[index * 4 + 1] = g;
-    PALETTE[index * 4 + 2] = b;
-    PALETTE[index * 4 + 3] = a;
-    refreshPaletteImage();
+	paletteContext.set(index, r, g, b, a);
 }
 
 function loadPalette(colors) {
-    for (let index = 0; index < colors.length; index++) {
-        let c = colors[index];
-        let r = c[0];
-        let g = c[1];
-        let b = c[2];
-        let a = (c.length > 3) ? c[3] : 255;
-
-        PALETTE[index * 4 + 0] = r;
-        PALETTE[index * 4 + 1] = g;
-        PALETTE[index * 4 + 2] = b;
-        PALETTE[index * 4 + 3] = a;
-    }
-    refreshPaletteImage();
-}
-
-/**
- * Upload the render image data to video memory.
- */
- function initializeRenderImage() {
-    imageTex = gl.createTexture();
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, imageTex);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.ALPHA, _instance.screenWidth, _instance.screenHeight, 0, gl.ALPHA, gl.UNSIGNED_BYTE, renderImage);
+	paletteContext.load(colors);
 }
 
 /**
@@ -353,8 +191,8 @@ function loadPalette(colors) {
  * @param {number} y 
  * @returns {number} The palette index at the given position.
  */
- function getPixel(x, y) {
-    return renderImage[y * _instance.screenWidth + x];
+function getPixel(x, y) {
+	return renderContext.getPixel(x, y);
 }
 
 /**
@@ -365,13 +203,7 @@ function loadPalette(colors) {
  * @param {number} color 
  */
 function setPixel(x, y, color) {
-    x = Math.floor(x);
-    y = Math.floor(y);
-    color = Math.floor(color);
-    if (color < 0) color = 0;
-    if (color > 255) color = 255;
-
-    renderImage[y * _instance.screenWidth + x] = color;
+	renderContext.setPixel(x, y, color);
 }
 
 /**
@@ -380,16 +212,7 @@ function setPixel(x, y, color) {
  * @param {number} color 
  */
 function clearScreen(color) {
-    renderImage = renderImage.fill(color);
-}
-
-/**
- * Reload the render texture in video memory from the renderImage array.
- */
- function refreshRenderImage() {
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, imageTex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.ALPHA, _instance.screenWidth, _instance.screenHeight, 0, gl.ALPHA, gl.UNSIGNED_BYTE, renderImage);
+	renderContext.clear(color);
 }
 
 /**
@@ -438,7 +261,7 @@ function presentFrameBuffer(time) {
     // calls gl.uniformXXX, gl.activeTexture, gl.bindTexture
     twgl.setUniforms(canvasShader, {
         u_matrix: m,
-        u_texture: renderTexture,
+        u_texture: renderContext.texture,
         u_time: time * 0.0001
     });
     // calls gl.drawArrays or gl.drawElements
@@ -469,7 +292,7 @@ function beginRender(time) {
  * @param {number} time How much time has passed, in milliseconds, since the start.
  */
 function endRender(time) {
-    refreshRenderImage();
+	renderContext.refresh();
     refreshFrameBuffer();
     presentFrameBuffer(time);
 }
@@ -536,13 +359,16 @@ function initialize(gameInstance) {
     loadRenderShader();
     initializeQuadBuffer();
 
-    initializeRenderTexture();
-    initializeDepthBuffer();
+	// Make a pixel texture to match the requested screen size.
+	renderContext = new RenderContext(gl, _instance.screenWidth, _instance.screenHeight);
+
+	initializeDepthBuffer();
 
     initializeFramebuffer();
 
+	paletteContext = new PaletteContext(gl, PALETTE_SIZE);
     initializePalette();
-    initializeRenderImage();
+	renderContext.createTexture();
 
     _instance.canvas.addEventListener('mousedown', function(e) {
         const pos = convertPosition(e.clientX, e.clientY);
@@ -580,6 +406,7 @@ function initialize(gameInstance) {
         }
     });
 
+	console.log(paletteContext);
     _instance.onInit();
     requestAnimationFrame(onRenderFrame);
     requestAnimationFrame(onUpdateFrame);

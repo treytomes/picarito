@@ -33,6 +33,7 @@
     "jimp": "^0.16.1",
     "lodash": "^4.17.21",
     "node-polyfill-webpack-plugin": "^1.1.4",
+    "text-loader": "^0.0.1",
     "twgl.js": "^4.22.0"
   }
 }
