@@ -1,3 +1,5 @@
+import { isNumber } from 'lodash';
+
 export default class ConsoleTile {
 	constructor(tileIndex, foregroundColor, backgroundColor) {
 		this.tileIndex = tileIndex;

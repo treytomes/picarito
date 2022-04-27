@@ -9,7 +9,6 @@ import ConsoleTile from './ConsoleTile';
 import OEM437_8 from './OEM437_8.png';
 
 import './style.css';
-import { isNumber } from 'lodash';
 
 class TerminalGameCanvas extends GameCanvas {
 	constructor() {
