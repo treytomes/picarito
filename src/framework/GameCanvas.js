@@ -10,7 +10,23 @@ export default class GameCanvas {
 
     onInit() {}
 	loadContent() {}
-    onMouseDown(x, y, buttons) {}
+
+	/**
+	 * @param {KeyboardEvent} e 
+	 */
+	onKeyDown(e) {}
+
+	/**
+	 * @param {KeyboardEvent} e 
+	 */
+	onKeyUp(e) {}
+
+	/**
+	 * @param {KeyboardEvent} e 
+	 */
+	onKeyPress(e) {}
+	
+	onMouseDown(x, y, buttons) {}
     onMouseUp(x, y, buttons) {}
     onMouseMove(x, y, buttons) {}
     onUpdate(time) {}

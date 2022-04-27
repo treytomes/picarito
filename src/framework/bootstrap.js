@@ -370,6 +370,21 @@ function initialize(gameInstance) {
     initializePalette();
 	renderContext.createTexture();
 
+	document.addEventListener('keydown', function(e) {
+		//console.log('keydown', e);
+		_instance.onKeyDown(e);
+	});
+
+	document.addEventListener('keyup', function(e) {
+		//console.log('keyup', e);
+		_instance.onKeyUp(e);
+	});
+
+	document.addEventListener('keypress', function(e) {
+		//console.log('keypress', e);
+		_instance.onKeyPress(e);
+	});
+
     _instance.canvas.addEventListener('mousedown', function(e) {
         const pos = convertPosition(e.clientX, e.clientY);
         _instance.onMouseDown(pos.x, pos.y, e.buttons);

@@ -18,7 +18,7 @@ module.exports = {
 	},
 	plugins: [
 		new HtmlWebpackPlugin({
-			title: 'Development'
+			title: 'Picarito'
 		}),
 		new NodePolyfillPlugin() // Required to make Jimp work in a browser.
 	],
