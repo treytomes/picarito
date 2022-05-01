@@ -1,4 +1,5 @@
 import { loadPalette } from './bootstrap.js';
+import { MoreMath } from './MoreMath';
 
 /**
  * Generate a palette with 6 increments each of red, green, and blue.
@@ -55,5 +56,25 @@ function getColor(r, g = null, b = null) {
         return r * 36 + g * 6 + b;
     }
 }
+
+/**
+ * Get a color multipled by some percentage.
+ * 
+ * @param {number} c 
+ * @param {number} percent 
+ */
+/*
+function getShadedColor(c, percent) {
+	const r = Math.floor(c / 100) % 10;
+	const g = Math.floor(c / 10) % 10;
+	const b = (c % 10);
+
+	r = MoreMath.clamp(Math.floor(r * percent), 0, 5);
+	g = MoreMath.clamp(Math.floor(g * percent), 0, 5);
+	b = MoreMath.clamp(Math.floor(b * percent), 0, 5);
+
+	return r * 36 + g * 6 + b;
+}
+*/
 
 export { generatePalette, getColor };

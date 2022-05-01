@@ -421,7 +421,6 @@ function initialize(gameInstance) {
         }
     });
 
-	console.log(paletteContext);
     _instance.onInit();
     requestAnimationFrame(onRenderFrame);
     requestAnimationFrame(onUpdateFrame);
