@@ -2,9 +2,10 @@ import { initialize } from './framework/bootstrap.js';
 import { MoreMath } from './framework/MoreMath.js';
 import { getColor } from './framework/radialPalette.js';
 import TerminalGameCanvas from './TerminalGameCanvas';
-import ConsoleTile from './ConsoleTile';
+import WorldTile from './WorldTile';
 import Keys from './Keys';
 import Rectangle from './Rectangle';
+import BspTree from './BspTree';
 import './style.css';
 import { max, random } from 'lodash';
 
@@ -19,30 +20,6 @@ class Logger {
 const LOGGER = new Logger();
 
 // TODO: Particles.
-
-class WorldTile extends ConsoleTile {
-	constructor(tileIndex, foregroundColor, backgroundColor) {
-		super(tileIndex, foregroundColor, backgroundColor);
-		this.blocksMovement = false;
-		this.blocksVision = false;
-	}
-
-	set blocksMovement(value) {
-		this._blocksMovement = value;
-	}
-
-	get blocksMovement() {
-		return this._blocksMovement;
-	}
-
-	set blocksVision(value) {
-		this._blocksVision = value;
-	}
-
-	get blocksVision() {
-		return this._blocksVision;
-	}
-}
 
 class Entity extends WorldTile {
 	constructor(tileIndex, foregroundColor, backgroundColor) {
@@ -147,10 +124,28 @@ class WorldGenerator {
 
 	generate() {}
 
+
+	getTile(x, y) {
+		if ((x < 0) || (x >= this.width) || (y < 0) || (y >= this.height)) {
+			console.log("getTile error: ", x, y);
+			return;
+		}
+		return this.worldTiles[y][x];
+	}
+
+	setTile(x, y, tile) {
+		if ((x < 0) || (x >= this.width) || (y < 0) || (y >= this.height)) {
+			console.log("setTile error: ", x, y);
+			return;
+		}
+		this.worldTiles[y][x] = tile;
+	}
+
 	drawText(x, y, text, foregroundColor, backgroundColor, blocksMovement = true) {
 		for (let n = 0; n < text.length; n++) {
-			this.worldTiles[y][x + n] = new WorldTile(text[n], foregroundColor, backgroundColor);
-			this.worldTiles[y][x + n].blocksMovement = blocksMovement;
+			const tile = new WorldTile(text[n], foregroundColor, backgroundColor);
+			tile.blocksMovement = blocksMovement;
+			thie.setTile(x + n, y, tile);
 		}
 	}
 
@@ -162,69 +157,21 @@ class WorldGenerator {
 			height = this.height - y;
 		}
 		for (let _x = x; _x < x + width; _x++) {
-			this.worldTiles[y][_x] = tileFn();
-			this.worldTiles[y + height - 1][_x] = tileFn();
+			this.setTile(_x, y, tileFn());
+			this.setTile(_x, y + height - 1, tileFn());
 		}
 		for (let _y = y + 1; _y < y + height - 1; _y++) {
-			this.worldTiles[_y][x] = tileFn();
-			this.worldTiles[_y][x + width - 1] = tileFn();
+			this.setTile(x, _y, tileFn());
+			this.setTile(x + width - 1, _y, tileFn());
 		}
 	}
 
 	fillRect(x, y, width, height, tileFn) {
 		for (let _y = y; _y < y + height; _y++) {
 			for (let _x = x; _x < x + width; _x++) {
-				this.worldTiles[_y][_x] = tileFn();
+				this.setTile(_x, _y, tileFn());
 			}
 		}
-	}
-}
-
-class BspTree extends Rectangle {
-	constructor(x, y, width, height, minWidth, minHeight) {
-		super(x, y, width, height);
-
-		this.minWidth = minWidth;
-		this.minHeight = minHeight;
-
-		this.A = null;
-		this.B = null;
-		this.split();
-	}
-
-	split() {
-		const SPLIT_VERTICAL = random(0, 1) === 0;
-		if (SPLIT_VERTICAL) {
-			if (!this.splitVertical()) {
-				this.splitHorizontal();
-			}
-		} else {
-			if (!this.splitHorizontal()) {
-				this.splitVertical();
-			}
-		}
-	}
-
-	splitVertical() {
-		const SIZE = random(this.minHeight, this.height - this.minHeight);
-		if ((SIZE < this.minHeight) || (this.height - SIZE < this.minHeight)) {
-			return false;
-		}
-
-		this.A = new BspTree(this.x, this.y, this.width, SIZE, this.minWidth, this.minHeight);
-		this.B = new BspTree(this.x, this.y + SIZE, this.width, this.height - SIZE, this.minWidth, this.minHeight);
-		return true;
-	}
-
-	splitHorizontal() {
-		const SIZE = random(this.minWidth, this.width - this.minWidth);
-		if ((SIZE < this.minWidth) || (this.width - SIZE < this.minWidth)) {
-			return false;
-		}
-
-		this.A = new BspTree(this.x, this.y, SIZE, this.height, this.minWidth, this.minHeight);
-		this.B = new BspTree(this.x + SIZE, this.y, this.width - SIZE, this.height, this.minWidth, this.minHeight);
-		return true;
 	}
 }
 
@@ -242,22 +189,6 @@ const ROOM_HEIGHT_MAX = 12;
 class ArenaWorldGenerator extends WorldGenerator {
 	constructor(width, height) {
 		super(width, height);
-	}
-
-	getTile(x, y) {
-		if ((x < 0) || (x >= this.width) || (y < 0) || (y >= this.height)) {
-			console.log("getTile error: ", x, y);
-			return;
-		}
-		return this.worldTiles[y][x];
-	}
-
-	setTile(x, y, tile) {
-		if ((x < 0) || (x >= this.width) || (y < 0) || (y >= this.height)) {
-			console.log("getTile error: ", x, y);
-			return;
-		}
-		this.worldTiles[y][x] = tile;
 	}
 
 	generate() {
@@ -282,6 +213,13 @@ class ArenaWorldGenerator extends WorldGenerator {
 		this.bspDescend(tree);
 		this.connectAllRooms();
 		this.decorateRooms();
+	}
+
+	getSpawnPoint() {
+		const spawnRoom = this.rooms[0];
+		const x = random(spawnRoom.left + 1, spawnRoom.right - 1);
+		const y = random(spawnRoom.top + 1, spawnRoom.bottom - 1);
+		return { x: x, y: y };
 	}
 
 	/**
@@ -314,30 +252,46 @@ class ArenaWorldGenerator extends WorldGenerator {
 		}
 	}
 
+	canPlaceHorizontalDoor(x, y) {
+		return this.getTile(x - 1, y).blocksMovement && this.getTile(x + 1, y).blocksMovement;
+	}
+
+	canPlaceVerticalDoor(x, y) {
+		return this.getTile(x, y - 1).blocksMovement && this.getTile(x, y + 1).blocksMovement;
+	}
+
 	decorateRoom(room) {
 		// Walk the room permiter and place doors where a tunnel enters the room.
 		for (let x = room.left + 1; x <= room.right - 1; x++) {
 			if (this.getTile(x, room.top).blocksMovement) {
-				this.worldTiles[room.top][x] = TileFactory.wall();
+				this.setTile(x, room.top, TileFactory.wall());
 			} else {
-				this.worldTiles[room.top][x] = TileFactory.door();
+				if (this.canPlaceHorizontalDoor(x, room.top)) {
+					this.setTile(x, room.top, TileFactory.door());
+				}
 			}
 			if (this.getTile(x, room.bottom).blocksMovement) {
-				this.worldTiles[room.bottom][x] = TileFactory.wall();
+				this.setTile(x, room.bottom, TileFactory.wall());
 			} else {
-				this.worldTiles[room.bottom][x] = TileFactory.door();
+				if (this.canPlaceHorizontalDoor(x, room.bottom)) {
+					this.setTile(x, room.bottom, TileFactory.door());
+				}
 			}
 		}
 		for (let y = room.top + 1; y <= room.bottom - 1; y++) {
 			if (this.getTile(room.left, y).blocksMovement) {
-				this.worldTiles[y][room.left] = TileFactory.wall();
+				this.setTile(room.left, y, TileFactory.wall());
 			} else {
-				this.worldTiles[y][room.left] = TileFactory.door();
+				if (this.canPlaceVerticalDoor(room.left, y)) {
+					this.setTile(room.left, y, TileFactory.door());
+				}
 			}
 			if (this.getTile(room.right, y).blocksMovement) {
-				this.worldTiles[y][room.right] = TileFactory.wall();
+				this.setTile(room.right, y, TileFactory.wall());
 			} else {
-				this.worldTiles[y][room.right] = TileFactory.door();
+				if (this.canPlaceVerticalDoor(room.right, y)) {
+					this.setTile(room.right, y, TileFactory.door());
+				}
 			}
 		}
 		this.fillRect(room.x + 1, room.y + 1, room.width - 2, room.height - 2, () => TileFactory.floor());
@@ -386,8 +340,10 @@ class WorldGameCanvas extends TerminalGameCanvas {
 	constructor() {
 		super(28, 32)
 
-		this.player = EntityFactory.player(20, 20);
-		this.worldTiles = (new ArenaWorldGenerator(WORLD_WIDTH, WORLD_HEIGHT)).worldTiles;
+		const generator = new ArenaWorldGenerator(WORLD_WIDTH, WORLD_HEIGHT);
+		this.worldTiles = generator.worldTiles;
+		const spawnPoint = generator.getSpawnPoint();
+		this.player = EntityFactory.player(spawnPoint.x, spawnPoint.y);
 	}
 
 	drawWorld() {
