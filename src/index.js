@@ -8,6 +8,9 @@ import Rectangle from './Rectangle';
 import BspTree from './BspTree';
 import './style.css';
 import { max, random } from 'lodash';
+import WorldGenerator from './WorldGenerator.js';
+
+// TODO: https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API
 
 const WORLD_WIDTH = 64;
 const WORLD_HEIGHT = 64;
@@ -101,80 +104,6 @@ class EntityFactory {
 	}
 }
 
-class WorldGenerator {
-	constructor(width, height) {
-		this.width = width;
-		this.height = height;
-		this.worldTiles = null;
-
-		this.initialize();
-		this.generate();
-	}
-
-	initialize() {
-		this.worldTiles = [];
-		for (let y = 0; y < this.height; y++) {
-			const row = [];
-			for (let x = 0; x < this.width; x++) {
-				row.push(new WorldTile(0, 0, 0));
-			}
-			this.worldTiles.push(row);
-		}
-	}
-
-	generate() {}
-
-
-	getTile(x, y) {
-		if ((x < 0) || (x >= this.width) || (y < 0) || (y >= this.height)) {
-			console.log("getTile error: ", x, y);
-			return;
-		}
-		return this.worldTiles[y][x];
-	}
-
-	setTile(x, y, tile) {
-		if ((x < 0) || (x >= this.width) || (y < 0) || (y >= this.height)) {
-			console.log("setTile error: ", x, y);
-			return;
-		}
-		this.worldTiles[y][x] = tile;
-	}
-
-	drawText(x, y, text, foregroundColor, backgroundColor, blocksMovement = true) {
-		for (let n = 0; n < text.length; n++) {
-			const tile = new WorldTile(text[n], foregroundColor, backgroundColor);
-			tile.blocksMovement = blocksMovement;
-			thie.setTile(x + n, y, tile);
-		}
-	}
-
-	drawRect(x, y, width, height, tileFn) {
-		if (x + width > this.width) {
-			width = this.width - x;
-		}
-		if (y + height > this.height) {
-			height = this.height - y;
-		}
-		for (let _x = x; _x < x + width; _x++) {
-			this.setTile(_x, y, tileFn());
-			this.setTile(_x, y + height - 1, tileFn());
-		}
-		for (let _y = y + 1; _y < y + height - 1; _y++) {
-			this.setTile(x, _y, tileFn());
-			this.setTile(x + width - 1, _y, tileFn());
-		}
-	}
-
-	fillRect(x, y, width, height, tileFn) {
-		for (let _y = y; _y < y + height; _y++) {
-			for (let _x = x; _x < x + width; _x++) {
-				this.setTile(_x, _y, tileFn());
-			}
-		}
-	}
-}
-
 class Room extends Rectangle {
 	constructor(rect) {
 		super(rect.x, rect.y, rect.width, rect.height);
@@ -186,7 +115,7 @@ const ROOM_HEIGHT_MIN = 8;
 const ROOM_WIDTH_MAX = 12;
 const ROOM_HEIGHT_MAX = 12;
 
-class ArenaWorldGenerator extends WorldGenerator {
+class DungeonWorldGenerator extends WorldGenerator {
 	constructor(width, height) {
 		super(width, height);
 	}
@@ -194,20 +123,6 @@ class ArenaWorldGenerator extends WorldGenerator {
 	generate() {
 		this.rooms = [];
 		this.fillRect(0, 0, this.width, this.height, () => TileFactory.wall());
-
-		//this.drawRect(0, 0, this.width, this.height, () => TileFactory.wall());
-		//this.fillRect(1, 1, this.width - 2, this.height - 2, () => TileFactory.floor());
-		//this.drawText(10, 5, 'Hello, world! :-D', getColor(550), getColor(3));
-
-		/*
-		const NUM_PILLARS = random(20, 40);
-		console.log(`Generating ${NUM_PILLARS} pillars.`);
-		for (let n = 0; n < NUM_PILLARS; n++) {
-			const x = random(1, this.width - 2);
-			const y = random(1, this.height - 2);
-			this.drawPillar(x, y);
-		}
-		*/
 
 		const tree = new BspTree(0, 0, this.width, this.height, ROOM_WIDTH_MAX, ROOM_HEIGHT_MAX);
 		this.bspDescend(tree);
@@ -326,6 +241,37 @@ class ArenaWorldGenerator extends WorldGenerator {
 			y += dy;
 		} 
 	}
+}
+
+class ArenaWorldGenerator extends WorldGenerator {
+	constructor(width, height) {
+		super(width, height);
+	}
+
+	generate() {
+		this.rooms = [];
+		this.fillRect(1, 1, this.width - 2, this.height - 2, () => TileFactory.floor());
+		this.drawRect(0, 0, this.width, this.height, () => TileFactory.wall());
+
+		const NUM_PILLARS = random(20, 40);
+		console.log(`Generating ${NUM_PILLARS} pillars.`);
+		for (let n = 0; n < NUM_PILLARS; n++) {
+			const x = random(1, this.width - 2);
+			const y = random(1, this.height - 2);
+			this.drawPillar(x, y);
+		}
+	}
+
+	getSpawnPoint() {
+		while (true) {
+			const x = random(1, this.width - 2);
+			const y = random(1, this.height - 2);
+			const tile = this.getTile(x, y);
+			if (!tile.blocksMovement) {
+				return { x: x, y: y };
+			}
+		}
+	}
 
 	drawPillar(x, y) {
 		this.worldTiles[y][x] = TileFactory.wall();
@@ -336,14 +282,25 @@ class ArenaWorldGenerator extends WorldGenerator {
 	}
 }
 
+class Particle {
+	
+}
+
+class ParticleFountain {
+
+}
+
 class WorldGameCanvas extends TerminalGameCanvas {
 	constructor() {
 		super(28, 32)
 
+		//const generator = new DungeonWorldGenerator(WORLD_WIDTH, WORLD_HEIGHT);
 		const generator = new ArenaWorldGenerator(WORLD_WIDTH, WORLD_HEIGHT);
 		this.worldTiles = generator.worldTiles;
 		const spawnPoint = generator.getSpawnPoint();
 		this.player = EntityFactory.player(spawnPoint.x, spawnPoint.y);
+
+		this.particleFountains = [];
 	}
 
 	drawWorld() {
@@ -383,20 +340,9 @@ class WorldGameCanvas extends TerminalGameCanvas {
 		const healthPercent = this.player.currentHealth / this.player.maxHealth;
 		const backgroundColor = getColor(Math.floor(5 * (1 - healthPercent)) * 100);
 		this.drawTile(y_off + this.player.y, x_off + this.player.x, this.player.tileIndex, this.player.foregroundColor, backgroundColor);
-	}
 
-	fillRect(x, y, width, height, tileIndex, fg, bg) {
-		if (x + width > this.width) {
-			width = this.width - x;
-		}
-		if (y + height > this.height) {
-			height = this.height - y;
-		}
-
-		for (let dy = 0; dy < height; dy++) {
-			for (let dx = 0; dx < width; dx++) {
-				this.drawTile(y + dy, x + dx, tileIndex, fg, bg);
-			}
+		for (let n = 0; n < this.particleFountains.length; n++) {
+			this.particleFountains[n].draw(this);
 		}
 	}
 

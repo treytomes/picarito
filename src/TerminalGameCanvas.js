@@ -66,6 +66,21 @@ export default class TerminalGameCanvas extends GameCanvas {
 		}
 	}
 
+	fillRect(x, y, width, height, tileIndex, fg, bg) {
+		if (x + width > this.width) {
+			width = this.width - x;
+		}
+		if (y + height > this.height) {
+			height = this.height - y;
+		}
+
+		for (let dy = 0; dy < height; dy++) {
+			for (let dx = 0; dx < width; dx++) {
+				this.drawTile(y + dy, x + dx, tileIndex, fg, bg);
+			}
+		}
+	}
+
 	clear() {
 		for (let r = 0; r < this.rows; r++) {
 			for (let c = 0; c < this.columns; c++) {
