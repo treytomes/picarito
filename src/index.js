@@ -294,8 +294,8 @@ class WorldGameCanvas extends TerminalGameCanvas {
 	constructor() {
 		super(28, 32)
 
-		//const generator = new DungeonWorldGenerator(WORLD_WIDTH, WORLD_HEIGHT);
-		const generator = new ArenaWorldGenerator(WORLD_WIDTH, WORLD_HEIGHT);
+		const generator = new DungeonWorldGenerator(WORLD_WIDTH, WORLD_HEIGHT);
+		//const generator = new ArenaWorldGenerator(WORLD_WIDTH, WORLD_HEIGHT);
 		this.worldTiles = generator.worldTiles;
 		const spawnPoint = generator.getSpawnPoint();
 		this.player = EntityFactory.player(spawnPoint.x, spawnPoint.y);

@@ -19,16 +19,17 @@ void main() {
 	pos = distort(pos);
 
 	// Scanlines
-	/*
-	color -= abs(sin(pos.y * 100.0 + u_time * 5.0)) * 0.08; // (1)
-	color -= abs(sin(pos.y * 300.0 - u_time * 10.0)) * 0.05; // (2)
-	color.a = 1.0;
-	*/
 
 	color *= sign(sin(pos.y * 3000.0));
 	//color -= abs(sin(pos.y * 100.0 + u_time * 5.0)) * 0.08; // (1)
 	color.a = 1.0;
 	
+
+	color -= abs(sin(pos.y * 100.0 + u_time * 5.0)) * 0.08;
+	color.a = 1.0;
+
+	// Bloom
+
 	float dx = 1.0 / 256.0 / 2.0;
 	float dy = 1.0 / 224.0 / 2.0;
 	vec4 color0 = texture2D(u_texture, vec2(pos.x - dx, pos.y - dy));
