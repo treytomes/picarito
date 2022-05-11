@@ -4,7 +4,7 @@ uniform sampler2D u_texture;
 uniform float u_time;
 
 vec2 distort(vec2 pos) {
-	float distortion = 0.005;
+	float distortion = 0.01;
 	pos -= vec2(0.5, 0.5);
 	pos *= vec2(pow(length(pos), distortion));
 	pos += vec2(0.5, 0.5);
@@ -13,10 +13,11 @@ vec2 distort(vec2 pos) {
 
 void main() {
 	vec2 pos = v_texcoord;
-	vec4 color = texture2D(u_texture, v_texcoord);
 
 	// Barrel Distortion
-	pos = distort(pos);
+	//pos = distort(pos);
+
+	vec4 color = texture2D(u_texture, v_texcoord);
 
 	// Scanlines
 
