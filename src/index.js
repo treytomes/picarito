@@ -9,6 +9,7 @@ import BspTree from './BspTree';
 import './style.css';
 import { max, random } from 'lodash';
 import WorldGenerator from './WorldGenerator.js';
+import ConsoleTile from './ConsoleTile.js';
 
 // TODO: https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API
 
@@ -282,12 +283,97 @@ class ArenaWorldGenerator extends WorldGenerator {
 	}
 }
 
-class Particle {
-	
+class Particle extends ConsoleTile {
+	constructor(x, y) {
+		super('*', getColor(5, 5, 5), getColor(0, 0, 0));
+		this.x = x;
+		this.y = y;
+		this.dx = 1;
+		this.dy = 0;
+
+		this.totalTime = 0;
+		this.lastUpdateTime = 0;
+		this.speed = 300;
+
+		// Lifespan in milliseconds.
+		this.lifeSpan = 5000;
+	}
+
+	get isAlive() {
+		return this.totalTime < this.lifeSpan;
+	}
+
+	get isDead() {
+		return !this.isAlive;
+	}
+
+	update(time) {
+		this.totalTime += time;
+		if (this.totalTime - this.lastUpdateTime > this.speed) {
+			this.x += this.dx;
+			this.y += this.dy;
+			this.lastUpdateTime = this.totalTime;
+		}
+	}
+
+	/**
+	 * 
+	 * @param {WorldGameCanvas} world 
+	 */
+	draw(world) {
+		world.drawTile(this.y, this.x, '*', this.foregroundColor, this.backgroundColor);
+	}
 }
 
 class ParticleFountain {
+	constructor() {
+		this.x = 5;
+		this.y = 5;
+		this.particles = [];
 
+		this.spawnTimer = 0;
+		this.lastSpawnTime = 0;
+		this.spawnRate = 1000;
+	}
+
+	spawn() {
+		this.particles.push(new Particle(this.x, this.y));
+	}
+
+	/**
+	 * 
+	 * @param {number} time Elapsed milliseconds. 
+	 */
+	update(time) {
+		const deadParticles = [];
+		this.spawnTimer += time;
+		if (this.spawnTimer - this.lastSpawnTime >= this.spawnRate) {
+			this.spawn();
+			this.lastSpawnTime = this.spawnTimer;
+		}
+
+		for (let n = 0; n < this.particles.length; n++) {
+			const particle = this.particles[n];
+			particle.update(time);
+			if (particle.isDead) {
+				deadParticles.push(n);
+			}
+		}
+
+		for (let n = 0; n < deadParticles.length; n++) {
+			this.particles.splice(deadParticles[n], 1);
+		}
+	}
+
+	/**
+	 * 
+	 * @param {WorldGameCanvas} world 
+	 */
+	draw(world) {
+		for (let n = 0; n < this.particles.length; n++) {
+			this.particles[n].draw(world);
+		}
+	}
 }
 
 class WorldGameCanvas extends TerminalGameCanvas {
@@ -301,9 +387,19 @@ class WorldGameCanvas extends TerminalGameCanvas {
 		this.player = EntityFactory.player(spawnPoint.x, spawnPoint.y);
 
 		this.particleFountains = [];
+		this.particleFountains.push(new ParticleFountain());
+	}
+
+	
+    onUpdate(time) {
+		for (let n = 0; n < this.particleFountains.length; n++) {
+			this.particleFountains[n].update(time);
+		}
 	}
 
 	drawWorld() {
+		this.clear();
+
 		const SCREEN_START_X = 0;
 		const SCREEN_START_Y = 1;
 		const SCREEN_DISPLAY_WIDTH = this.columns;

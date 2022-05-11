@@ -104,4 +104,6 @@ export default class TerminalGameCanvas extends GameCanvas {
 			}
 		}
 	}
+	
+    onUpdate(time) {}
 }

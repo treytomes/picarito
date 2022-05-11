@@ -332,8 +332,10 @@ function convertPosition(x, y) {
     return { x: newX, y: newY };
 }
 
+let lastUpdateTime = 0;
 function onUpdateFrame(time) {
-    _instance.onUpdate(time);
+    _instance.onUpdate(time - lastUpdateTime);
+	lastUpdateTime = time;
     requestAnimationFrame(onUpdateFrame);
 }
 
