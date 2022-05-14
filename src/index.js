@@ -9,7 +9,8 @@ import BspTree from './BspTree';
 import './style.css';
 import { max, random } from 'lodash';
 import WorldGenerator from './WorldGenerator.js';
-import ConsoleTile from './ConsoleTile.js';
+import Particle from './Particle';
+import ParticleFountain from './ParticleFountain';
 
 // TODO: https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API
 
@@ -17,8 +18,8 @@ const WORLD_WIDTH = 64;
 const WORLD_HEIGHT = 64;
 
 class Logger {
-	log(text, color) {
-		console.log(text);
+	log(text, htmlColor) {
+		console.log("%c" + text, 'color: ' + htmlColor);
 	}
 }
 const LOGGER = new Logger();
@@ -49,7 +50,7 @@ class Entity extends WorldTile {
 			delta = this.maxHealth - this.currentHealth;
 		}
 		this.currentHealth += delta;
-		LOGGER.log(`${this.name} was healed by ${delta}.`, getColor(50));
+		LOGGER.log(`${this.name} was healed by ${delta}.`, 'green');
 	}
 
 	damage(delta) {
@@ -59,7 +60,7 @@ class Entity extends WorldTile {
 			delta = this.maxHealth - this.currentHealth;
 		}
 		this.currentHealth -= delta;
-		LOGGER.log(`${this.name} was damaged by ${delta}.`, getColor(500));
+		LOGGER.log(`${this.name} was damaged by ${delta}.`, 'red');
 	}
 }
 
@@ -283,96 +284,24 @@ class ArenaWorldGenerator extends WorldGenerator {
 	}
 }
 
-class Particle extends ConsoleTile {
+class DamageParticleFountain extends ParticleFountain {
 	constructor(x, y) {
-		super('*', getColor(5, 5, 5), getColor(0, 0, 0));
-		this.x = x;
-		this.y = y;
-		this.dx = 1;
-		this.dy = 0;
+		super(x, y);
+		this.spawnRate = 0;
 
-		this.totalTime = 0;
-		this.lastUpdateTime = 0;
-		this.speed = 300;
+		const SPEED = 50;
+		const LIFESPAN = 800;
+		const FG_COLOR = getColor(5, 0, 0);
+		const BG_COLOR = getColor(0, 0, 0);
 
-		// Lifespan in milliseconds.
-		this.lifeSpan = 5000;
-	}
-
-	get isAlive() {
-		return this.totalTime < this.lifeSpan;
-	}
-
-	get isDead() {
-		return !this.isAlive;
-	}
-
-	update(time) {
-		this.totalTime += time;
-		if (this.totalTime - this.lastUpdateTime > this.speed) {
-			this.x += this.dx;
-			this.y += this.dy;
-			this.lastUpdateTime = this.totalTime;
-		}
-	}
-
-	/**
-	 * 
-	 * @param {WorldGameCanvas} world 
-	 */
-	draw(world) {
-		world.drawTile(this.y, this.x, '*', this.foregroundColor, this.backgroundColor);
-	}
-}
-
-class ParticleFountain {
-	constructor() {
-		this.x = 5;
-		this.y = 5;
-		this.particles = [];
-
-		this.spawnTimer = 0;
-		this.lastSpawnTime = 0;
-		this.spawnRate = 1000;
-	}
-
-	spawn() {
-		this.particles.push(new Particle(this.x, this.y));
-	}
-
-	/**
-	 * 
-	 * @param {number} time Elapsed milliseconds. 
-	 */
-	update(time) {
-		const deadParticles = [];
-		this.spawnTimer += time;
-		if (this.spawnTimer - this.lastSpawnTime >= this.spawnRate) {
-			this.spawn();
-			this.lastSpawnTime = this.spawnTimer;
-		}
-
-		for (let n = 0; n < this.particles.length; n++) {
-			const particle = this.particles[n];
-			particle.update(time);
-			if (particle.isDead) {
-				deadParticles.push(n);
-			}
-		}
-
-		for (let n = 0; n < deadParticles.length; n++) {
-			this.particles.splice(deadParticles[n], 1);
-		}
-	}
-
-	/**
-	 * 
-	 * @param {WorldGameCanvas} world 
-	 */
-	draw(world) {
-		for (let n = 0; n < this.particles.length; n++) {
-			this.particles[n].draw(world);
-		}
+		this.particles.push(new Particle(this.x, this.y,  1,  1, SPEED, LIFESPAN, FG_COLOR, BG_COLOR));
+		this.particles.push(new Particle(this.x, this.y,  0,  1, SPEED, LIFESPAN, FG_COLOR, BG_COLOR));
+		this.particles.push(new Particle(this.x, this.y, -1,  1, SPEED, LIFESPAN, FG_COLOR, BG_COLOR));
+		this.particles.push(new Particle(this.x, this.y,  1,  0, SPEED, LIFESPAN, FG_COLOR, BG_COLOR));
+		this.particles.push(new Particle(this.x, this.y, -1,  0, SPEED, LIFESPAN, FG_COLOR, BG_COLOR));
+		this.particles.push(new Particle(this.x, this.y,  1, -1, SPEED, LIFESPAN, FG_COLOR, BG_COLOR));
+		this.particles.push(new Particle(this.x, this.y,  0, -1, SPEED, LIFESPAN, FG_COLOR, BG_COLOR));
+		this.particles.push(new Particle(this.x, this.y, -1, -1, SPEED, LIFESPAN, FG_COLOR, BG_COLOR));
 	}
 }
 
@@ -387,13 +316,25 @@ class WorldGameCanvas extends TerminalGameCanvas {
 		this.player = EntityFactory.player(spawnPoint.x, spawnPoint.y);
 
 		this.particleFountains = [];
-		this.particleFountains.push(new ParticleFountain());
 	}
 
+	spawnDamageParticles(x, y) {
+		this.particleFountains.push(new DamageParticleFountain(x, y));
+	}
 	
     onUpdate(time) {
+		const deadFountains = [];
+
 		for (let n = 0; n < this.particleFountains.length; n++) {
-			this.particleFountains[n].update(time);
+			const fountain = this.particleFountains[n];
+			fountain.update(time);
+			if (fountain.isDead) {
+				deadFountains.push(fountain);
+			}
+		}
+
+		for (let n = 0; n < deadFountains.length; n++) {
+			this.particleFountains.splice(deadFountains[n], 1);
 		}
 	}
 
@@ -438,7 +379,7 @@ class WorldGameCanvas extends TerminalGameCanvas {
 		this.drawTile(y_off + this.player.y, x_off + this.player.x, this.player.tileIndex, this.player.foregroundColor, backgroundColor);
 
 		for (let n = 0; n < this.particleFountains.length; n++) {
-			this.particleFountains[n].draw(this);
+			this.particleFountains[n].draw(this, x_off, y_off);
 		}
 	}
 
@@ -493,6 +434,7 @@ class WorldGameCanvas extends TerminalGameCanvas {
 				break;
 			case Keys.KEY_F:
 				this.player.damage(1);
+				this.spawnDamageParticles(this.player.x, this.player.y);
 				break;
 			default:
 				console.log(e.keyCode);
