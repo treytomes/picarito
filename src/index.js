@@ -305,9 +305,38 @@ class DamageParticleFountain extends ParticleFountain {
 	}
 }
 
-class WorldGameCanvas extends TerminalGameCanvas {
+/**
+ * A generic state to base all other states on.
+ */
+class GameState {
+	constructor() {}
+	
+	/**
+	 * @param {number} time Elapsed time since the last frame. 
+	 */
+	onUpdate(time) {}
+
+	/**
+	 * 
+	 * @param {number} time Elapsed time since the last frame.
+	 * @param {TerminalGameCanvas} terminal The screen to draw to.
+	 */
+	onRender(time, terminal) {}
+
+	onKeyDown(e) {}
+
+	onKeyUp(e) {}
+
+	onMouseDown(x, y, buttons) {}
+
+	onMouseUp(x, y, buttons) {}
+
+	onMouseMove(x, y, buttons) {}
+}
+
+class GameplayState extends GameState {
 	constructor() {
-		super(28, 32)
+		super();
 
 		const generator = new DungeonWorldGenerator(WORLD_WIDTH, WORLD_HEIGHT);
 		//const generator = new ArenaWorldGenerator(WORLD_WIDTH, WORLD_HEIGHT);
@@ -321,8 +350,8 @@ class WorldGameCanvas extends TerminalGameCanvas {
 	spawnDamageParticles(x, y) {
 		this.particleFountains.push(new DamageParticleFountain(x, y));
 	}
-	
-    onUpdate(time) {
+
+	onUpdate(time) {
 		const deadFountains = [];
 
 		for (let n = 0; n < this.particleFountains.length; n++) {
@@ -338,21 +367,21 @@ class WorldGameCanvas extends TerminalGameCanvas {
 		}
 	}
 
-	drawWorld() {
-		this.clear();
+	drawWorld(terminal) {
+		terminal.clear();
 
 		const SCREEN_START_X = 0;
 		const SCREEN_START_Y = 1;
-		const SCREEN_DISPLAY_WIDTH = this.columns;
-		const SCREEN_DISPLAY_HEIGHT = this.rows - 1;
+		const SCREEN_DISPLAY_WIDTH = terminal.columns;
+		const SCREEN_DISPLAY_HEIGHT = terminal.rows - 1;
 
-		let worldLeft = this.player.x - this.columns / 2;
+		let worldLeft = this.player.x - terminal.columns / 2;
 		let worldRight = worldLeft + SCREEN_DISPLAY_WIDTH;
-		let worldTop = this.player.y - this.rows / 2;
+		let worldTop = this.player.y - terminal.rows / 2;
 		let worldBottom = worldTop + SCREEN_DISPLAY_HEIGHT;
 
-		const x_off = SCREEN_START_X + this.columns / 2 - this.player.x;
-		const y_off = SCREEN_START_Y + this.rows / 2 - this.player.y;
+		const x_off = SCREEN_START_X + terminal.columns / 2 - this.player.x;
+		const y_off = SCREEN_START_Y + terminal.rows / 2 - this.player.y;
 
 		if (worldLeft < 0) {
 			worldLeft = 0;
@@ -370,20 +399,20 @@ class WorldGameCanvas extends TerminalGameCanvas {
 		for (let y = worldTop; y < worldBottom; y++) {
 			for (let x = worldLeft; x < worldRight; x++) {
 				const tile = this.worldTiles[y][x];
-				this.drawTile(y_off + y, x_off + x, tile.tileIndex, tile.foregroundColor, tile.backgroundColor);
+				terminal.drawTile(y_off + y, x_off + x, tile.tileIndex, tile.foregroundColor, tile.backgroundColor);
 			}
 		}
 
 		const healthPercent = this.player.currentHealth / this.player.maxHealth;
 		const backgroundColor = getColor(Math.floor(5 * (1 - healthPercent)) * 100);
-		this.drawTile(y_off + this.player.y, x_off + this.player.x, this.player.tileIndex, this.player.foregroundColor, backgroundColor);
+		terminal.drawTile(y_off + this.player.y, x_off + this.player.x, this.player.tileIndex, this.player.foregroundColor, backgroundColor);
 
 		for (let n = 0; n < this.particleFountains.length; n++) {
-			this.particleFountains[n].draw(this, x_off, y_off);
+			this.particleFountains[n].draw(terminal, x_off, y_off);
 		}
 	}
 
-	drawHud() {
+	drawHud(terminal) {
 		const HUD_WIDTH = this.columns;
 		const HUD_HEIGHT = 1;
 		const SCREEN_START_X = 0;
@@ -391,29 +420,27 @@ class WorldGameCanvas extends TerminalGameCanvas {
 		const HUD_BG_COLOR = getColor(5);
 		const HUD_FG_COLOR = getColor(550);
 
-		this.fillRect(SCREEN_START_X, SCREEN_START_Y, HUD_WIDTH, HUD_HEIGHT, 32, HUD_FG_COLOR, HUD_BG_COLOR);
+		terminal.fillRect(SCREEN_START_X, SCREEN_START_Y, HUD_WIDTH, HUD_HEIGHT, 32, HUD_FG_COLOR, HUD_BG_COLOR);
 
 		let left = SCREEN_START_X;
 
 		const levelText = `LVL:${this.player.level}`;
-		this.drawString(SCREEN_START_Y, left, levelText, HUD_FG_COLOR, HUD_BG_COLOR);
+		terminal.drawString(SCREEN_START_Y, left, levelText, HUD_FG_COLOR, HUD_BG_COLOR);
 		left += levelText.length + 1;
 
 		const experienceText = `XP:${this.player.experience}/${this.player.experienceToLevel}`;
-		this.drawString(SCREEN_START_Y, left, experienceText, HUD_FG_COLOR, HUD_BG_COLOR);
+		terminal.drawString(SCREEN_START_Y, left, experienceText, HUD_FG_COLOR, HUD_BG_COLOR);
 		left += experienceText.length + 1;
 
 		const healthText = `HP:${this.player.currentHealth}/${this.player.maxHealth}`;
-		this.drawString(SCREEN_START_Y, left, healthText, HUD_FG_COLOR, HUD_BG_COLOR);
+		terminal.drawString(SCREEN_START_Y, left, healthText, HUD_FG_COLOR, HUD_BG_COLOR);
 		left += healthText.length + 1;
 	}
 
-	onRender(time) {
-		this.clear();
-		this.drawWorld();
-		this.drawHud();
-
-		super.onRender(time);
+	onRender(time, terminal) {
+		terminal.clear();
+		this.drawWorld(terminal);
+		this.drawHud(terminal);
 	}
 
 	onKeyDown(e) {
@@ -449,12 +476,13 @@ class WorldGameCanvas extends TerminalGameCanvas {
 	}
 
 	pixelsToWorld(x, y) {
+		const TILE_SIZE = 8;
 		const SCREEN_START_X = 0;
 		const SCREEN_START_Y = 1;
 		const x_off = this.player.x - this.columns / 2 - SCREEN_START_X;
 		const y_off = this.player.y - this.rows / 2 - SCREEN_START_Y;
-		const row = y_off + Math.floor(y / this.tileSet.tileHeight);
-		const column = x_off + Math.floor(x / this.tileSet.tileWidth);
+		const row = y_off + Math.floor(y / TILE_SIZE);
+		const column = x_off + Math.floor(x / TILE_SIZE);
 		return [ row, column ];
 	}
 
@@ -474,8 +502,50 @@ class WorldGameCanvas extends TerminalGameCanvas {
 	}
 }
 
+class PicaritoGameCanvas extends TerminalGameCanvas {
+	constructor() {
+		super(28, 32)
+
+		this.states = [];
+		this.states.push(new GameplayState());
+	}
+
+	get currentState() {
+		return this.states[this.states.length - 1];
+	}
+	
+    onUpdate(time) {
+		this.currentState.onUpdate(time);
+	}
+
+	onRender(time) {
+		this.currentState.onRender(time, this);
+		super.onRender(time);
+	}
+
+	onKeyDown(e) {
+		this.currentState.onKeyDown(e);
+	}
+
+	onKeyUp(e) {
+		this.currentState.onKeyUp(e);
+	}
+
+	onMouseDown(x, y, buttons) {
+		this.currentState.onMouseDown(x, y, buttons);
+	}
+
+    onMouseUp(x, y, buttons) {
+		this.currentState.onMouseUp(x, y, buttons);
+	}
+
+    onMouseMove(x, y, buttons) {
+		this.currentState.onMouseMove(x, y, buttons);
+	}
+}
+
 function onWindowLoad() {
-	initialize(new WorldGameCanvas());
+	initialize(new PicaritoGameCanvas());
 }
 
 window.addEventListener('load', onWindowLoad, false);
