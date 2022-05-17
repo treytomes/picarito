@@ -11,6 +11,7 @@ import { max, random } from 'lodash';
 import WorldGenerator from './WorldGenerator.js';
 import Particle from './Particle';
 import ParticleFountain from './ParticleFountain';
+import GameState from './GameState';
 
 // TODO: https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API
 
@@ -32,7 +33,9 @@ class Entity extends WorldTile {
 		this.x = 0;
 		this.y = 0;
 		this.maxHealth = this.currentHealth = 1;
-		this.name = 'Player';
+		this.name = 'Entity';
+		this.speed = 1;
+		this.energy = 0;
 	}
 
 	get isDead() {
@@ -41,6 +44,14 @@ class Entity extends WorldTile {
 
 	get isAlive() {
 		return !this.isDead;
+	}
+
+	get canAct() {
+		return this.energy >= 0;
+	}
+
+	get movementCost() {
+		return 10;
 	}
 
 	heal(delta) {
@@ -62,6 +73,23 @@ class Entity extends WorldTile {
 		this.currentHealth -= delta;
 		LOGGER.log(`${this.name} was damaged by ${delta}.`, 'red');
 	}
+
+	update(worldTiles) {
+		if (this.energy < 0) {
+			this.energy += this.speed;
+		}
+	}
+
+	move(worldTiles, dx, dy) {
+		const newX = this.x + dx;
+		const newY = this.y + dy;
+		const tile = worldTiles[newY][newX];
+		if (!tile.blocksMovement) {
+			this.x = newX;
+			this.y = newY;
+			this.energy -= this.movementCost;
+		}
+	}
 }
 
 class PlayerEntity extends Entity {
@@ -71,6 +99,24 @@ class PlayerEntity extends Entity {
 		this.level = 1;
 		this.experience = 0;
 		this.experienceToLevel = 0;
+		this.name = 'player';
+	}
+}
+
+class AntEntity extends Entity {
+	constructor() {
+		super('a', getColor(140), getColor(0));
+		this.name = 'ant';
+	}
+
+	update(worldTiles) {
+		super.update(worldTiles);
+
+		if (this.canAct) {
+			const dx = random(-1, 1);
+			const dy = random(-1, 1);
+			this.move(worldTiles, dx, dy);
+		}
 	}
 }
 
@@ -79,6 +125,7 @@ class TileFactory {
 		const tile = new WorldTile('#', getColor(420), getColor(0));
 		tile.blocksMovement = true;
 		tile.blocksVision = true;
+		tile.name = 'wall';
 		return tile;
 	}
 
@@ -86,6 +133,7 @@ class TileFactory {
 		const tile = new WorldTile('.', getColor(210), getColor(0));
 		tile.blocksMovement = false;
 		tile.blocksVision = false;
+		tile.name = 'floor';
 		return tile;
 	}
 
@@ -93,6 +141,7 @@ class TileFactory {
 		const tile = new WorldTile(8, getColor(555), getColor(0))
 		tile.blocksMovement = false;
 		tile.blocksVision = true;
+		tile.name = 'door';
 		return tile;
 	}
 }
@@ -100,6 +149,13 @@ class TileFactory {
 class EntityFactory {
 	static player(x, y) {
 		const entity = new PlayerEntity('@', getColor(555), getColor(0));
+		entity.x = x;
+		entity.y = y;
+		return entity;
+	}
+
+	static ant(x, y) {
+		const entity = new AntEntity('a', getColor(140), getColor(0));
 		entity.x = x;
 		entity.y = y;
 		return entity;
@@ -132,8 +188,15 @@ class DungeonWorldGenerator extends WorldGenerator {
 		this.decorateRooms();
 	}
 
-	getSpawnPoint() {
+	getStartPoint() {
 		const spawnRoom = this.rooms[0];
+		const x = random(spawnRoom.left + 1, spawnRoom.right - 1);
+		const y = random(spawnRoom.top + 1, spawnRoom.bottom - 1);
+		return { x: x, y: y };
+	}
+
+	getSpawnPoint() {
+		const spawnRoom = this.rooms[random(0, this.rooms.length - 1)];
 		const x = random(spawnRoom.left + 1, spawnRoom.right - 1);
 		const y = random(spawnRoom.top + 1, spawnRoom.bottom - 1);
 		return { x: x, y: y };
@@ -264,6 +327,17 @@ class ArenaWorldGenerator extends WorldGenerator {
 		}
 	}
 
+	getStartPoint() {
+		while (true) {
+			const x = random(1, this.width - 2);
+			const y = random(1, this.height - 2);
+			const tile = this.getTile(x, y);
+			if (!tile.blocksMovement) {
+				return { x: x, y: y };
+			}
+		}
+	}
+
 	getSpawnPoint() {
 		while (true) {
 			const x = random(1, this.width - 2);
@@ -305,44 +379,25 @@ class DamageParticleFountain extends ParticleFountain {
 	}
 }
 
-/**
- * A generic state to base all other states on.
- */
-class GameState {
-	constructor() {}
-	
-	/**
-	 * @param {number} time Elapsed time since the last frame. 
-	 */
-	onUpdate(time) {}
-
-	/**
-	 * 
-	 * @param {number} time Elapsed time since the last frame.
-	 * @param {TerminalGameCanvas} terminal The screen to draw to.
-	 */
-	onRender(time, terminal) {}
-
-	onKeyDown(e) {}
-
-	onKeyUp(e) {}
-
-	onMouseDown(x, y, buttons) {}
-
-	onMouseUp(x, y, buttons) {}
-
-	onMouseMove(x, y, buttons) {}
-}
-
 class GameplayState extends GameState {
-	constructor() {
+	constructor(rows, columns) {
 		super();
+
+		this.rows = rows;
+		this.columns = columns;
 
 		const generator = new DungeonWorldGenerator(WORLD_WIDTH, WORLD_HEIGHT);
 		//const generator = new ArenaWorldGenerator(WORLD_WIDTH, WORLD_HEIGHT);
 		this.worldTiles = generator.worldTiles;
-		const spawnPoint = generator.getSpawnPoint();
+		let spawnPoint = generator.getStartPoint();
 		this.player = EntityFactory.player(spawnPoint.x, spawnPoint.y);
+		
+		this.entities = [];
+		const numEntities = random(10, 20);
+		for (let n = 0; n < numEntities; n++) {
+			let spawnPoint = generator.getSpawnPoint();
+			this.entities.push(EntityFactory.ant(spawnPoint.x, spawnPoint.y));
+		}
 
 		this.particleFountains = [];
 	}
@@ -364,6 +419,13 @@ class GameplayState extends GameState {
 
 		for (let n = 0; n < deadFountains.length; n++) {
 			this.particleFountains.splice(deadFountains[n], 1);
+		}
+
+		if (!this.player.canAct) {
+			for (let n = 0; n < this.entities.length; n++) {
+				this.entities[n].update(this.worldTiles);
+			}
+			this.player.update(this.worldTiles);
 		}
 	}
 
@@ -403,8 +465,15 @@ class GameplayState extends GameState {
 			}
 		}
 
-		const healthPercent = this.player.currentHealth / this.player.maxHealth;
-		const backgroundColor = getColor(Math.floor(5 * (1 - healthPercent)) * 100);
+		for (let n = 0; n < this.entities.length; n++) {
+			const entity = this.entities[n];
+			let healthPercent = entity.currentHealth / entity.maxHealth;
+			let backgroundColor = getColor(Math.floor(5 * (1 - healthPercent)) * 100);
+			terminal.drawTile(y_off + entity.y, x_off + entity.x, entity.tileIndex, entity.foregroundColor, backgroundColor);	
+		}
+
+		let healthPercent = this.player.currentHealth / this.player.maxHealth;
+		let backgroundColor = getColor(Math.floor(5 * (1 - healthPercent)) * 100);
 		terminal.drawTile(y_off + this.player.y, x_off + this.player.x, this.player.tileIndex, this.player.foregroundColor, backgroundColor);
 
 		for (let n = 0; n < this.particleFountains.length; n++) {
@@ -413,7 +482,7 @@ class GameplayState extends GameState {
 	}
 
 	drawHud(terminal) {
-		const HUD_WIDTH = this.columns;
+		const HUD_WIDTH = terminal.columns;
 		const HUD_HEIGHT = 1;
 		const SCREEN_START_X = 0;
 		const SCREEN_START_Y = 0;
@@ -444,6 +513,10 @@ class GameplayState extends GameState {
 	}
 
 	onKeyDown(e) {
+		if (!this.player.canAct) {
+			return;
+		}
+
 		let dx = 0;
 		let dy = 0;
 		switch (e.keyCode) {
@@ -468,11 +541,7 @@ class GameplayState extends GameState {
 				break;
 		}
 
-		const tile = this.worldTiles[this.player.y + dy][this.player.x + dx];
-		if (!tile.blocksMovement) {
-			this.player.x += dx;
-			this.player.y += dy;
-		}
+		this.player.move(this.worldTiles, dx, dy);
 	}
 
 	pixelsToWorld(x, y) {
@@ -486,19 +555,56 @@ class GameplayState extends GameState {
 		return [ row, column ];
 	}
 
+	findEntitiesAt(x, y) {
+		const entities = [];
+		if ((this.player.x === x) && (this.player.y === y)) {
+			entities.push(this.player);
+		}
+		for (let n = 0; n < this.entities.length; n++) {
+			const entity = this.entities[n];
+			if ((entity.x === x) && (entity.y === y)) {
+				entities.push(entity);
+			}
+		}
+		return entities;
+	}
+
+	describe(entity) {
+		console.log(`Description of ${entity.name}:`);
+		console.log({
+			currentHealth: entity.currentHealth,
+			maxHealth: entity.maxHealth,
+			speed: entity.speed,
+			energy: entity.energy,
+		});
+	}
+
 	onMouseDown(x, y, buttons) {
 		const [ row, column ] = this.pixelsToWorld(x, y);
-		console.log(`onMouseDown: ${x}, ${y}, ${column}, ${row}`);
+
+		const entities = this.findEntitiesAt(column, row);
+		if (entities.length > 0) {
+			for (let n = 0; n < entities.length; n++) {
+				this.describe(entities[n]);
+			}
+		}
+
+		const tile = this.worldTiles[row][column];
+		console.log(`There is a ${tile.name} here.`);
 	}
 
     onMouseUp(x, y, buttons) {
 		const [ row, column ] = this.pixelsToWorld(x, y);
-		console.log(`onMouseUp: ${x}, ${y}, ${column}, ${row}`);
+		//console.log(`onMouseUp: ${x}, ${y}, ${column}, ${row}`);
 	}
 
     onMouseMove(x, y, buttons) {
 		const [ row, column ] = this.pixelsToWorld(x, y);
-		console.log(`onMouseMove: ${x}, ${y}, ${column}, ${row}`);
+		//console.log(`onMouseMove: ${x}, ${y}, ${column}, ${row}`);
+		const entities = this.findEntitiesAt(column, row);
+		if (entities.length > 0) {
+			console.log(`Entities @ (${column}, ${row}): ${entities.map(x => x.name).join(', ')}`);
+		}
 	}
 }
 
@@ -507,7 +613,7 @@ class PicaritoGameCanvas extends TerminalGameCanvas {
 		super(28, 32)
 
 		this.states = [];
-		this.states.push(new GameplayState());
+		this.states.push(new GameplayState(this.rows, this.columns));
 	}
 
 	get currentState() {

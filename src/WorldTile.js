@@ -5,6 +5,7 @@ export default class WorldTile extends ConsoleTile {
 		super(tileIndex, foregroundColor, backgroundColor);
 		this.blocksMovement = false;
 		this.blocksVision = false;
+		this.name = '';
 	}
 
 	set blocksMovement(value) {
